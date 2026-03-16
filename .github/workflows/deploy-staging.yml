@@ -1,14 +1,38 @@
 name: Deploy — Staging
 
 on:
-  push:
-    branches: [main]
+  # Manual trigger only — automatic deploys enabled in Epic 9 when AWS infra is provisioned
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
+        default: 'Manual staging deploy'
 
 jobs:
+  check-credentials:
+    name: Check AWS credentials are real
+    runs-on: ubuntu-latest
+    outputs:
+      aws-ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check if AWS credentials are configured (not placeholders)
+        id: check
+        run: |
+          if [ "${{ secrets.AWS_ACCESS_KEY_ID }}" = "placeholder" ] || [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "⚠️  AWS credentials are placeholders — skipping deploy. Configure real credentials in Epic 9."
+          else
+            echo "ready=true" >> $GITHUB_OUTPUT
+            echo "✅ AWS credentials present — proceeding with deploy."
+          fi
+
   deploy-staging:
     name: Build & Deploy to Staging
     runs-on: ubuntu-latest
     environment: staging
+    needs: check-credentials
+    if: needs.check-credentials.outputs.aws-ready == 'true'
 
     steps:
       - name: Checkout code
@@ -58,4 +82,4 @@ jobs:
             --region ${{ secrets.AWS_REGION }}
 
       - name: Notify deployment
-        run: echo "Deployed ${{ github.sha }} to staging ✅"
+        run: echo "Deployed ${{ github.sha }} to staging ✅ — ${{ github.event.inputs.reason }}"
