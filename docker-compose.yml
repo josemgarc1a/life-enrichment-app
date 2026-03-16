@@ -1,0 +1,96 @@
+version: '3.9'
+
+services:
+
+  # ===== Spring Boot Backend =====
+  app:
+    build: .
+    container_name: life-enrichment-app
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/life_enrichment
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: local-dev-secret-key-must-be-at-least-256-bits-long-change-in-prod
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_NAME: life-enrichment-photos
+      # Point to LocalStack for local S3 emulation
+      AWS_ENDPOINT_OVERRIDE: http://localstack:4566
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      TWILIO_ACCOUNT_SID: local-dev-sid
+      TWILIO_AUTH_TOKEN: local-dev-token
+      TWILIO_FROM_NUMBER: "+15005550006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    networks:
+      - le-network
+    restart: unless-stopped
+
+  # ===== PostgreSQL =====
+  postgres:
+    image: postgres:16-alpine
+    container_name: life-enrichment-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: life_enrichment
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - le-network
+
+  # ===== LocalStack (S3 emulation) =====
+  localstack:
+    image: localstack/localstack:latest
+    container_name: life-enrichment-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - le-network
+
+  # ===== MailHog (local email testing) =====
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: life-enrichment-mailhog
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI → http://localhost:8025
+    networks:
+      - le-network
+
+volumes:
+  postgres-data:
+  localstack-data:
+
+networks:
+  le-network:
+    driver: bridge

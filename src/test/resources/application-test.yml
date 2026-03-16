@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+  flyway:
+    enabled: false  # Use JPA DDL for test schema
+
+jwt:
+  secret: test-secret-key-for-unit-tests-only-must-be-256bits-long
+  expiration-ms: 3600000
+  refresh-expiration-ms: 86400000
+
+aws:
+  region: us-east-1
+  s3:
+    bucket-name: test-bucket
+    presigned-url-expiry-minutes: 60
+  credentials:
+    access-key: test-key
+    secret-key: test-secret
+
+twilio:
+  account-sid: test-sid
+  auth-token: test-token
+  from-number: "+15005550006"
+
+logging:
+  level:
+    com.lifeenrichment: DEBUG
