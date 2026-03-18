@@ -77,7 +77,7 @@ public class AuthService {
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
 
-        auditService.log(user, AuditService.REGISTER, "role=" + user.getRole().name());
+        auditService.log(null, AuditService.REGISTER, "email=" + user.getEmail() + " role=" + user.getRole().name());
         log.info("New user registered: {}", user.getEmail());
         return buildResponse(accessToken, refreshToken, user.getRole().name());
     }
