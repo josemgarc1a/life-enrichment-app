@@ -15,11 +15,11 @@ Your behavior, rules, and constraints are defined there. Those rules override yo
 - Agentic Workflow — Operating Manual
 
 ## Git workflow
-- Always branch from `develop`
+- Always branch from `development`
 - Branch naming: feature/{issue-id}-{slug}
 - Commit format: feat/test/docs/fix/chore: description
-- PRs always target `develop`, never `main`
-- Never commit directly to `develop` or `main`
+- PRs always target `development`, never `main`
+- Never commit directly to `development` or `main`
 
 ## Package structure
 com.lifeenrichment
