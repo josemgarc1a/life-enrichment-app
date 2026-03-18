@@ -1,8 +1,10 @@
 package com.lifeenrichment.controller;
 
+import com.lifeenrichment.dto.request.ForgotPasswordRequest;
 import com.lifeenrichment.dto.request.LoginRequest;
 import com.lifeenrichment.dto.request.RefreshRequest;
 import com.lifeenrichment.dto.request.RegisterRequest;
+import com.lifeenrichment.dto.request.ResetPasswordRequest;
 import com.lifeenrichment.dto.response.AuthResponse;
 import com.lifeenrichment.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "Register, login, token refresh, and logout")
+@Tag(name = "Authentication", description = "Register, login, token refresh, logout, and password reset")
 public class AuthController {
 
     private final AuthService authService;
@@ -58,6 +60,25 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request.getRefreshToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Request password reset",
+               description = "Sends a password reset email if the address is registered. Always returns 202 to prevent user enumeration.")
+    @ApiResponse(responseCode = "202", description = "Reset email sent if address exists")
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.accepted().build();
+    }
+
+    @Operation(summary = "Reset password",
+               description = "Sets a new password using the secure token received by email. Token is single-use and expires in 1 hour.")
+    @ApiResponse(responseCode = "204", description = "Password updated successfully")
+    @ApiResponse(responseCode = "400", description = "Invalid, expired, or already-used token")
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
         return ResponseEntity.noContent().build();
     }
 }
