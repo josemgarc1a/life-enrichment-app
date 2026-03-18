@@ -43,6 +43,7 @@ class AuthServiceTest {
     @Mock AuthenticationManager authenticationManager;
     @Mock JavaMailSender mailSender;
     @Mock TemplateEngine templateEngine;
+    @Mock AuditService auditService;
 
     @InjectMocks AuthService authService;
 
