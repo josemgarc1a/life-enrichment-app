@@ -45,6 +45,7 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
+    private final AuditService auditService;
 
     @Value("${jwt.expiration-ms}")
     private long jwtExpirationMs;
@@ -55,10 +56,9 @@ public class AuthService {
     @Value("${spring.mail.username:noreply@lifeenrichment.app}")
     private String fromEmail;
 
-    // ── Password reset token expiry (1 hour) ─────────────────────────────────
     private static final long RESET_TOKEN_EXPIRY_MINUTES = 60;
 
-    // ── Existing methods ──────────────────────────────────────────────────────
+    // ── Auth methods ──────────────────────────────────────────────────────────
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -77,15 +77,22 @@ public class AuthService {
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
 
+        auditService.log(user, AuditService.REGISTER, "role=" + user.getRole().name());
         log.info("New user registered: {}", user.getEmail());
         return buildResponse(accessToken, refreshToken, user.getRole().name());
     }
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
+        } catch (Exception e) {
+            User failedUser = userRepository.findByEmail(request.getEmail()).orElse(null);
+            auditService.log(failedUser, AuditService.LOGIN_FAILED, "email=" + request.getEmail());
+            throw e;
+        }
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException("User not found"));
@@ -95,6 +102,7 @@ public class AuthService {
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
 
+        auditService.log(user, AuditService.LOGIN_SUCCESS, null);
         log.info("User logged in: {}", user.getEmail());
         return buildResponse(accessToken, refreshToken, user.getRole().name());
     }
@@ -109,6 +117,7 @@ public class AuthService {
                 .orElseThrow(() -> new BusinessException("Refresh token not recognized — please log in again"));
 
         String newAccessToken = jwtUtils.generateAccessToken(user.getEmail(), user.getRole().name());
+        auditService.log(user, AuditService.TOKEN_REFRESHED, null);
         return buildResponse(newAccessToken, refreshToken, user.getRole().name());
     }
 
@@ -117,6 +126,7 @@ public class AuthService {
         userRepository.findByRefreshToken(refreshToken).ifPresent(user -> {
             user.setRefreshToken(null);
             userRepository.save(user);
+            auditService.log(user, AuditService.LOGOUT, null);
             log.info("User logged out: {}", user.getEmail());
         });
     }
@@ -138,9 +148,10 @@ public class AuthService {
 
             String resetLink = appBaseUrl + "/reset-password?token=" + rawToken;
             sendPasswordResetEmail(user.getEmail(), resetLink);
+
+            auditService.log(user, AuditService.PASSWORD_RESET_REQUESTED, null);
             log.info("Password reset email sent to: {}", user.getEmail());
         });
-        // Silent success when email not found — prevents user enumeration
     }
 
     @Transactional
@@ -166,6 +177,7 @@ public class AuthService {
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);
 
+        auditService.log(user, AuditService.PASSWORD_RESET_COMPLETED, null);
         log.info("Password reset completed for user: {}", user.getEmail());
     }
 
