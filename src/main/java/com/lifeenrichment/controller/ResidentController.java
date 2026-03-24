@@ -3,6 +3,7 @@ package com.lifeenrichment.controller;
 import com.lifeenrichment.dto.request.CreateResidentRequest;
 import com.lifeenrichment.dto.request.LinkFamilyMemberRequest;
 import com.lifeenrichment.dto.request.UpdateResidentRequest;
+import com.lifeenrichment.dto.response.PhotoUploadResponse;
 import com.lifeenrichment.dto.response.ResidentResponse;
 import com.lifeenrichment.dto.response.ResidentSummaryResponse;
 import com.lifeenrichment.entity.Resident;
@@ -13,9 +14,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -94,6 +97,18 @@ public class ResidentController {
                                                  @Valid @RequestBody LinkFamilyMemberRequest request) {
         residentService.linkFamilyMember(id, request.getUserId(), request.getRelationshipLabel());
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Upload or replace a resident's profile photo")
+    @ApiResponse(responseCode = "200", description = "Photo uploaded, URL returned")
+    @ApiResponse(responseCode = "400", description = "Invalid file type or size exceeds 5 MB")
+    @ApiResponse(responseCode = "403", description = "Access denied")
+    @ApiResponse(responseCode = "404", description = "Resident not found")
+    @PreAuthorize("hasRole('DIRECTOR')")
+    @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PhotoUploadResponse> uploadPhoto(@PathVariable UUID id,
+                                                           @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(residentService.uploadPhoto(id, file));
     }
 
     @Operation(summary = "Unlink a family member from a resident")
