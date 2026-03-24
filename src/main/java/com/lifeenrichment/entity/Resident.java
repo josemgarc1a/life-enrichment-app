@@ -18,8 +18,11 @@ public class Resident {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "full_name", nullable = false)
-    private String fullName;
+    @Column(name = "first_name", nullable = false)
+    private String firstName;
+
+    @Column(name = "last_name", nullable = false)
+    private String lastName;
 
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
@@ -50,6 +53,6 @@ public class Resident {
     private LocalDateTime updatedAt;
 
     public enum CareLevel {
-        LOW, MODERATE, HIGH
+        LOW, MEDIUM, HIGH
     }
 }
