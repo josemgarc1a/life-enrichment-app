@@ -10,6 +10,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/** Request body for the {@code POST /api/v1/auth/register} endpoint. */
 @Getter
 @Builder
 @NoArgsConstructor

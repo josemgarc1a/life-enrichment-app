@@ -11,12 +11,28 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * Spring Security {@link UserDetailsService} implementation that loads user accounts
+ * from the database by email address.
+ *
+ * <p>Bridges the application's {@link com.lifeenrichment.entity.User} entity to Spring
+ * Security's {@link UserDetails} model. The user's role is mapped to a
+ * {@code ROLE_<ROLE_NAME>} granted authority so that {@code @PreAuthorize("hasRole('...')")}
+ * expressions work as expected.
+ */
 @Service
 @RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
 
     private final UserRepository userRepository;
 
+    /**
+     * Loads a {@link UserDetails} by email. The {@code username} parameter is treated as
+     * an email address, consistent with how the JWT subject is populated.
+     *
+     * @param email the user's email address
+     * @throws UsernameNotFoundException if no user exists with that email
+     */
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user = userRepository.findByEmail(email)

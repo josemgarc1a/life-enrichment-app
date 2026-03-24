@@ -9,6 +9,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Full resident profile response, including personal details, care level,
+ * photo URL, and the list of linked family members.
+ * Returned by create, get, and update endpoints.
+ */
 @Getter @Builder
 public class ResidentResponse {
 
@@ -25,6 +30,7 @@ public class ResidentResponse {
     private LocalDateTime updatedAt;
     private List<FamilyMemberEntry> familyMembers;
 
+    /** Represents a single family member linked to this resident. */
     @Getter @Builder
     public static class FamilyMemberEntry {
         private UUID userId;

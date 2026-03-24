@@ -9,6 +9,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * JPA entity representing a resident living at the assisted-living facility.
+ *
+ * <p>Residents are never hard-deleted; the {@link #isActive} flag is set to {@code false}
+ * to archive a discharged resident while preserving their historical record and family
+ * member links. Only active residents appear in search results and activity scheduling.
+ */
 @Entity
 @Table(name = "residents")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -52,6 +59,15 @@ public class Resident {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /**
+     * Indicates the level of assistance a resident requires for daily activities.
+     *
+     * <ul>
+     *   <li>{@code LOW} — largely independent, minimal staff assistance needed</li>
+     *   <li>{@code MEDIUM} — requires some daily assistance</li>
+     *   <li>{@code HIGH} — requires continuous or high-frequency staff support</li>
+     * </ul>
+     */
     public enum CareLevel {
         LOW, MEDIUM, HIGH
     }

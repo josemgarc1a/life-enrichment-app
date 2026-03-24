@@ -9,6 +9,10 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
+/**
+ * Request body for the {@code POST /api/v1/residents} endpoint.
+ * All required fields are validated with Bean Validation constraints.
+ */
 @Getter @Setter @Builder
 public class CreateResidentRequest {
 

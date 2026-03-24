@@ -7,6 +7,14 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Join entity linking a {@link Resident} to a {@link com.lifeenrichment.entity.User}
+ * with the {@code FAMILY_MEMBER} role, along with an optional descriptive label
+ * (e.g. "Son", "Daughter", "Legal guardian").
+ *
+ * <p>The unique constraint on {@code (resident_id, user_id)} prevents a family member
+ * from being linked to the same resident more than once.
+ */
 @Entity
 @Table(
         name = "resident_family_members",

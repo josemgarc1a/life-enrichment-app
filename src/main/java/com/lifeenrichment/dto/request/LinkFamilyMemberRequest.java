@@ -7,6 +7,7 @@ import lombok.Setter;
 
 import java.util.UUID;
 
+/** Request body for the {@code POST /api/v1/residents/{id}/family-members} endpoint. */
 @Getter @Setter @Builder
 public class LinkFamilyMemberRequest {
 

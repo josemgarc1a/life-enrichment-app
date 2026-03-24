@@ -17,6 +17,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Spring Security configuration for the Life Enrichment App.
+ *
+ * <p>Configures a stateless, JWT-based security model:
+ * <ul>
+ *   <li>CSRF protection is disabled — not needed for stateless REST APIs.</li>
+ *   <li>Session management is set to {@code STATELESS} — no HTTP sessions are created.</li>
+ *   <li>The {@link JwtAuthFilter} is inserted before the default username/password filter.</li>
+ *   <li>Method-level security ({@code @PreAuthorize}) is enabled via {@code @EnableMethodSecurity}.</li>
+ * </ul>
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -38,6 +49,10 @@ public class SecurityConfig {
         "/actuator/health"
     };
 
+    /**
+     * Defines the HTTP security filter chain: public endpoints, role-based path rules,
+     * stateless session policy, and JWT filter placement.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -54,11 +69,13 @@ public class SecurityConfig {
             .build();
     }
 
+    /** Provides BCrypt password encoding with the default strength (10 rounds). */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /** Exposes the Spring-managed {@link AuthenticationManager} as a bean for use in {@link com.lifeenrichment.service.AuthService}. */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();

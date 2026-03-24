@@ -23,6 +23,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * REST controller for all resident-management operations.
+ *
+ * <p>Write operations (create, update, archive, photo upload, family member linking) require
+ * the {@code DIRECTOR} role. Read operations (get, search) require at least {@code STAFF}.
+ * All business logic is delegated to {@link com.lifeenrichment.service.ResidentService}.
+ */
 @RestController
 @RequestMapping("/api/v1/residents")
 @RequiredArgsConstructor
