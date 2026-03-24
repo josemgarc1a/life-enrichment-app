@@ -18,6 +18,17 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Service for writing and querying the tamper-evident audit log.
+ *
+ * <p>All authentication events (login, logout, token refresh, password reset, registration)
+ * are written via {@link #log}. The log entry is persisted in its own independent
+ * transaction ({@code REQUIRES_NEW}) so that a rollback in the calling service cannot
+ * suppress the audit record.
+ *
+ * <p>Predefined action-name constants (e.g. {@link #LOGIN_SUCCESS}) ensure consistent
+ * string values across the codebase and make audit queries predictable.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -56,6 +67,14 @@ public class AuditService {
 
     // ── Queries ───────────────────────────────────────────────────────────────
 
+    /**
+     * Returns a paginated list of audit log entries, optionally filtered by user and date range.
+     *
+     * @param userId   filter to a specific user, or {@code null} for all users
+     * @param from     inclusive start of the time range, or {@code null} to default to year 2000
+     * @param to       inclusive end of the time range, or {@code null} to default to now+1 day
+     * @param pageable pagination and sorting parameters
+     */
     @Transactional(readOnly = true)
     public Page<AuditLogResponse> findLogs(UUID userId, LocalDateTime from, LocalDateTime to, Pageable pageable) {
         LocalDateTime resolvedFrom = from != null ? from : LocalDateTime.of(2000, 1, 1, 0, 0);

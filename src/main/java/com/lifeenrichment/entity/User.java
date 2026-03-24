@@ -8,6 +8,13 @@ import org.hibernate.annotations.UpdateTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * JPA entity representing an application user.
+ *
+ * <p>Users can be Directors (full admin access), Staff (day-to-day operations),
+ * or Family Members (read-only access to their linked resident's information).
+ * Passwords are stored as BCrypt hashes; plain-text passwords are never persisted.
+ */
 @Entity
 @Table(name = "users")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -45,6 +52,15 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /**
+     * Access roles assigned to a user at registration time.
+     *
+     * <ul>
+     *   <li>{@code DIRECTOR} — full administrative access including reports and user management</li>
+     *   <li>{@code STAFF} — day-to-day operations; can view residents and log activities</li>
+     *   <li>{@code FAMILY_MEMBER} — limited read-only access linked to specific residents</li>
+     * </ul>
+     */
     public enum Role {
         DIRECTOR, STAFF, FAMILY_MEMBER
     }

@@ -7,6 +7,17 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Immutable audit log entry recording a security-relevant event in the system.
+ *
+ * <p>Written by {@link com.lifeenrichment.service.AuditService} for every authentication
+ * action (login, logout, registration, password reset, token refresh). The {@code user}
+ * association is nullable to allow recording events for unrecognized email addresses
+ * (e.g. failed login attempts where no account exists).
+ *
+ * <p>Rows in this table must never be updated or deleted in production — treat them as
+ * an append-only audit trail.
+ */
 @Entity
 @Table(name = "audit_logs",
        indexes = {

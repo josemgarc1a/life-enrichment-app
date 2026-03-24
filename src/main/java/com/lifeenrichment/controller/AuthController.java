@@ -19,6 +19,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * REST controller for all authentication flows: registration, login, token refresh,
+ * logout, and the two-step password-reset process.
+ *
+ * <p>All endpoints under {@code /api/v1/auth} are publicly accessible (no JWT required).
+ * Business logic is fully delegated to {@link com.lifeenrichment.service.AuthService}.
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

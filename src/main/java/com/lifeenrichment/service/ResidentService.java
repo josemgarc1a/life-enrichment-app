@@ -23,6 +23,19 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Business logic for managing resident profiles, family member links, and profile photos.
+ *
+ * <p>Key design decisions:
+ * <ul>
+ *   <li><strong>Soft delete only</strong> — residents are never removed from the database;
+ *       archiving sets {@code isActive = false} to preserve historical records.</li>
+ *   <li><strong>In-memory search filtering</strong> — all active residents are fetched once
+ *       and then filtered in Java, keeping queries simple until data volumes require JPQL.</li>
+ *   <li><strong>Photo management</strong> — when a new photo is uploaded, the previous S3
+ *       object is deleted first to prevent orphaned files.</li>
+ * </ul>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,6 +52,11 @@ public class ResidentService {
 
     // ── Create ────────────────────────────────────────────────────────────────
 
+    /**
+     * Creates and persists a new resident profile with {@code isActive = true}.
+     *
+     * @return the full profile response including the generated UUID
+     */
     @Transactional
     public ResidentResponse createResident(CreateResidentRequest request) {
         log.info("Creating resident: {} {}", request.getFirstName(), request.getLastName());
@@ -59,6 +77,11 @@ public class ResidentService {
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Retrieves an active resident's full profile, including linked family members.
+     *
+     * @throws ResourceNotFoundException if no resident exists with that ID, or if the resident is archived
+     */
     @Transactional(readOnly = true)
     public ResidentResponse getResident(UUID id) {
         Resident resident = residentRepository.findById(id)
@@ -69,6 +92,12 @@ public class ResidentService {
 
     // ── Update ────────────────────────────────────────────────────────────────
 
+    /**
+     * Applies a partial update to a resident profile — only non-null fields in the request
+     * overwrite the existing values; omitted fields are left unchanged.
+     *
+     * @throws ResourceNotFoundException if no resident exists with that ID
+     */
     @Transactional
     public ResidentResponse updateResident(UUID id, UpdateResidentRequest request) {
         log.info("Updating resident id: {}", id);
@@ -90,6 +119,12 @@ public class ResidentService {
 
     // ── Archive ───────────────────────────────────────────────────────────────
 
+    /**
+     * Soft-deletes a resident by setting {@code isActive = false}.
+     * The record and all associated family member links are retained in the database.
+     *
+     * @throws ResourceNotFoundException if no resident exists with that ID
+     */
     @Transactional
     public void archiveResident(UUID id) {
         log.info("Archiving resident id: {}", id);
@@ -104,6 +139,14 @@ public class ResidentService {
 
     // ── Search ────────────────────────────────────────────────────────────────
 
+    /**
+     * Returns a filtered list of active residents. All filter parameters are optional;
+     * passing {@code null} for all three returns every active resident.
+     *
+     * @param name       case-insensitive substring match against first or last name
+     * @param roomNumber exact, case-insensitive room number match
+     * @param careLevel  exact care-level match
+     */
     @Transactional(readOnly = true)
     public List<ResidentSummaryResponse> searchResidents(String name, String roomNumber,
                                                          Resident.CareLevel careLevel) {
@@ -134,6 +177,15 @@ public class ResidentService {
 
     // ── Family member linking ─────────────────────────────────────────────────
 
+    /**
+     * Creates a link between an active resident and a user with the {@code FAMILY_MEMBER} role.
+     *
+     * @param residentId        the resident to link to
+     * @param userId            the family member user account to associate
+     * @param relationshipLabel optional description of the relationship (e.g. "Son")
+     * @throws ResourceNotFoundException if the resident or user does not exist
+     * @throws BusinessException         if the user is already linked to this resident
+     */
     @Transactional
     public void linkFamilyMember(UUID residentId, UUID userId, String relationshipLabel) {
         Resident resident = residentRepository.findById(residentId)
@@ -158,6 +210,11 @@ public class ResidentService {
         log.info("Linked user {} to resident {} as '{}'", userId, residentId, relationshipLabel);
     }
 
+    /**
+     * Removes the link between a resident and a family member user account.
+     *
+     * @throws ResourceNotFoundException if no such link exists
+     */
     @Transactional
     public void unlinkFamilyMember(UUID residentId, UUID userId) {
         boolean exists = familyMemberRepository.findAllByResidentId(residentId)
@@ -174,6 +231,16 @@ public class ResidentService {
 
     // ── Photo upload ──────────────────────────────────────────────────────────
 
+    /**
+     * Validates, uploads, and associates a profile photo for the given resident.
+     *
+     * <p>Validation rejects files larger than 5 MB or with MIME types other than
+     * {@code image/jpeg}, {@code image/png}, or {@code image/webp}. If the resident
+     * already has a photo, the existing S3 object is deleted before the new one is uploaded.
+     *
+     * @throws BusinessException         if the file is too large or has an unsupported MIME type
+     * @throws ResourceNotFoundException if no resident exists with that ID
+     */
     @Transactional
     public PhotoUploadResponse uploadPhoto(UUID id, MultipartFile file) {
         if (file.getSize() > MAX_PHOTO_SIZE) {

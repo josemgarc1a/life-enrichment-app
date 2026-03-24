@@ -21,6 +21,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * REST controller exposing read-only access to the audit log.
+ * All endpoints require the {@code DIRECTOR} role.
+ *
+ * <p>Designed to support the compliance dashboard, allowing Directors to search
+ * and review authentication events filtered by user and/or time range.
+ */
 @RestController
 @RequestMapping("/api/v1/audit")
 @RequiredArgsConstructor

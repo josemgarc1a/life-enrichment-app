@@ -33,6 +33,18 @@ import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.UUID;
 
+/**
+ * Business logic for all authentication and password management operations.
+ *
+ * <p>Responsibilities include user registration, login (delegated to Spring's
+ * {@link org.springframework.security.authentication.AuthenticationManager}), JWT token
+ * issuance/refresh, logout (refresh-token revocation), and the two-step password-reset flow
+ * (email dispatch + token redemption).
+ *
+ * <p>Every auth event is written to the audit log via {@link AuditService} using a
+ * separate transaction so that failed login attempts are still recorded even when the
+ * outer transaction rolls back.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -60,6 +72,11 @@ public class AuthService {
 
     // ── Auth methods ──────────────────────────────────────────────────────────
 
+    /**
+     * Registers a new user, generates JWT tokens, and records the event in the audit log.
+     *
+     * @throws BusinessException if the email address is already registered
+     */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
@@ -82,6 +99,12 @@ public class AuthService {
         return buildResponse(accessToken, refreshToken, user.getRole().name());
     }
 
+    /**
+     * Authenticates the user by email and password, issues new JWT tokens, and logs the outcome.
+     * Failed attempts are audited before re-throwing the authentication exception.
+     *
+     * @throws org.springframework.security.core.AuthenticationException on invalid credentials
+     */
     @Transactional
     public AuthResponse login(LoginRequest request) {
         try {
@@ -107,6 +130,12 @@ public class AuthService {
         return buildResponse(accessToken, refreshToken, user.getRole().name());
     }
 
+    /**
+     * Issues a new access token in exchange for a valid, server-recognized refresh token.
+     * The refresh token itself is not rotated; only the access token changes.
+     *
+     * @throws BusinessException if the token is invalid, expired, or not found in the database
+     */
     @Transactional
     public AuthResponse refresh(String refreshToken) {
         if (!jwtUtils.validateToken(refreshToken)) {
@@ -121,6 +150,10 @@ public class AuthService {
         return buildResponse(newAccessToken, refreshToken, user.getRole().name());
     }
 
+    /**
+     * Revokes the refresh token by setting it to {@code null} on the user record.
+     * If the token is not recognized (already revoked or expired), the call is a no-op.
+     */
     @Transactional
     public void logout(String refreshToken) {
         userRepository.findByRefreshToken(refreshToken).ifPresent(user -> {
@@ -133,6 +166,13 @@ public class AuthService {
 
     // ── Password reset ────────────────────────────────────────────────────────
 
+    /**
+     * Initiates the password-reset flow for the given email address.
+     *
+     * <p>If the address is registered, a SHA-256-hashed single-use token is persisted
+     * and a reset link is dispatched via email. If the address is <em>not</em> found, the
+     * method returns without error to prevent user enumeration (the controller always returns 202).
+     */
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
@@ -154,6 +194,12 @@ public class AuthService {
         });
     }
 
+    /**
+     * Validates the reset token and updates the user's password.
+     * Tokens are single-use; redemption marks the token as used so it cannot be replayed.
+     *
+     * @throws BusinessException if the token is invalid, already used, or expired
+     */
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         String tokenHash = hashToken(request.getToken());

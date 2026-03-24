@@ -9,6 +9,18 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.util.Date;
 
+/**
+ * Utility component for creating, validating, and parsing JWT tokens.
+ *
+ * <p>Produces two token types:
+ * <ul>
+ *   <li><em>Access token</em> — short-lived, carries the user's email and role as claims.</li>
+ *   <li><em>Refresh token</em> — longer-lived, carries only the subject (email) and is
+ *       stored server-side so it can be revoked on logout.</li>
+ * </ul>
+ * Token expiry durations are driven by {@code jwt.expiration-ms} and
+ * {@code jwt.refresh-expiration-ms} in application properties.
+ */
 @Slf4j
 @Component
 public class JwtUtils {
@@ -26,6 +38,13 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
+    /**
+     * Generates a signed access token embedding the user's email (subject) and role claim.
+     *
+     * @param email the user's email address, used as the JWT subject
+     * @param role  the user's role name (e.g. {@code "DIRECTOR"}), stored as a custom claim
+     * @return a compact, signed JWT string
+     */
     public String generateAccessToken(String email, String role) {
         return Jwts.builder()
                 .subject(email)
@@ -36,6 +55,13 @@ public class JwtUtils {
                 .compact();
     }
 
+    /**
+     * Generates a refresh token containing only the user's email as its subject.
+     * This token is stored server-side and compared on refresh requests.
+     *
+     * @param email the user's email address
+     * @return a compact, signed JWT string
+     */
     public String generateRefreshToken(String email) {
         return Jwts.builder()
                 .subject(email)
@@ -45,10 +71,23 @@ public class JwtUtils {
                 .compact();
     }
 
+    /**
+     * Extracts the email (JWT subject) from a token without re-validating signature.
+     * Only call this after {@link #validateToken} has returned {@code true}.
+     *
+     * @param token a compact JWT string
+     * @return the email stored as the subject claim
+     */
     public String getEmailFromToken(String token) {
         return parseClaims(token).getSubject();
     }
 
+    /**
+     * Validates the token's signature and expiry.
+     *
+     * @param token a compact JWT string
+     * @return {@code true} if the token is well-formed, correctly signed, and not expired
+     */
     public boolean validateToken(String token) {
         try {
             parseClaims(token);

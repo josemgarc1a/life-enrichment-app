@@ -6,6 +6,11 @@ import lombok.Getter;
 
 import java.util.UUID;
 
+/**
+ * Lightweight resident summary used in search/list responses.
+ * Contains only the fields needed for a list-row display; use
+ * {@link ResidentResponse} to retrieve the full profile.
+ */
 @Getter @Builder
 public class ResidentSummaryResponse {
 
