@@ -2,6 +2,7 @@ package com.lifeenrichment.service;
 
 import com.lifeenrichment.dto.request.CreateResidentRequest;
 import com.lifeenrichment.dto.request.UpdateResidentRequest;
+import com.lifeenrichment.dto.response.PhotoUploadResponse;
 import com.lifeenrichment.dto.response.ResidentResponse;
 import com.lifeenrichment.dto.response.ResidentSummaryResponse;
 import com.lifeenrichment.entity.Resident;
@@ -16,8 +17,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -25,9 +28,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ResidentService {
 
+    private static final long MAX_PHOTO_SIZE = 5 * 1024 * 1024; // 5 MB
+    private static final Set<String> ALLOWED_MIME_TYPES =
+            Set.of("image/jpeg", "image/png", "image/webp");
+
     private final ResidentRepository residentRepository;
     private final ResidentFamilyMemberRepository familyMemberRepository;
     private final UserRepository userRepository;
+    private final S3Service s3Service;
 
     // ── Create ────────────────────────────────────────────────────────────────
 
@@ -162,6 +170,47 @@ public class ResidentService {
 
         familyMemberRepository.deleteByResidentIdAndUserId(residentId, userId);
         log.info("Unlinked user {} from resident {}", userId, residentId);
+    }
+
+    // ── Photo upload ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public PhotoUploadResponse uploadPhoto(UUID id, MultipartFile file) {
+        if (file.getSize() > MAX_PHOTO_SIZE) {
+            throw new BusinessException("File exceeds maximum allowed size of 5 MB");
+        }
+        if (!ALLOWED_MIME_TYPES.contains(file.getContentType())) {
+            throw new BusinessException("Unsupported file type: " + file.getContentType()
+                    + ". Allowed: image/jpeg, image/png, image/webp");
+        }
+
+        Resident resident = residentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Resident", id));
+
+        if (resident.getPhotoUrl() != null) {
+            String oldKey = extractS3Key(resident.getPhotoUrl());
+            s3Service.deleteFile(oldKey);
+        }
+
+        String extension = getExtension(file.getOriginalFilename());
+        String key = "residents/" + UUID.randomUUID() + extension;
+        String url = s3Service.uploadFile(key, file);
+
+        resident.setPhotoUrl(url);
+        residentRepository.save(resident);
+
+        log.info("Photo uploaded for resident {}: {}", id, url);
+        return PhotoUploadResponse.builder().photoUrl(url).build();
+    }
+
+    private String extractS3Key(String url) {
+        int idx = url.indexOf(".amazonaws.com/");
+        return idx >= 0 ? url.substring(idx + ".amazonaws.com/".length()) : url;
+    }
+
+    private String getExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return "";
+        return "." + filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
     }
 
     // ── Mappers ───────────────────────────────────────────────────────────────

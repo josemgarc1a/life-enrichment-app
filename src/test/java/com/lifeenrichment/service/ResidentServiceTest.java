@@ -2,6 +2,7 @@ package com.lifeenrichment.service;
 
 import com.lifeenrichment.dto.request.CreateResidentRequest;
 import com.lifeenrichment.dto.request.UpdateResidentRequest;
+import com.lifeenrichment.dto.response.PhotoUploadResponse;
 import com.lifeenrichment.dto.response.ResidentResponse;
 import com.lifeenrichment.dto.response.ResidentSummaryResponse;
 import com.lifeenrichment.entity.Resident;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -35,6 +37,7 @@ class ResidentServiceTest {
     @Mock private ResidentRepository residentRepository;
     @Mock private ResidentFamilyMemberRepository familyMemberRepository;
     @Mock private UserRepository userRepository;
+    @Mock private S3Service s3Service;
 
     @InjectMocks private ResidentService residentService;
 
@@ -284,5 +287,75 @@ class ResidentServiceTest {
 
         assertThrows(ResourceNotFoundException.class,
                 () -> residentService.unlinkFamilyMember(residentId, userId));
+    }
+
+    // ── uploadPhoto ───────────────────────────────────────────────────────────
+
+    @Test
+    void uploadPhoto_uploadsAndUpdatesPhotoUrl() {
+        when(residentRepository.findById(residentId)).thenReturn(Optional.of(activeResident));
+        when(s3Service.uploadFile(any(), any()))
+                .thenReturn("https://test-bucket.s3.us-east-1.amazonaws.com/residents/new.jpg");
+        when(residentRepository.save(any())).thenReturn(activeResident);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "photo.jpg", "image/jpeg", new byte[100]);
+
+        PhotoUploadResponse response = residentService.uploadPhoto(residentId, file);
+
+        assertThat(response.getPhotoUrl()).contains("amazonaws.com");
+        assertThat(activeResident.getPhotoUrl()).isNotNull();
+        verify(s3Service).uploadFile(any(), eq(file));
+    }
+
+    @Test
+    void uploadPhoto_deletesOldPhoto_beforeUploadingNew() {
+        activeResident.setPhotoUrl(
+                "https://test-bucket.s3.us-east-1.amazonaws.com/residents/old.jpg");
+
+        when(residentRepository.findById(residentId)).thenReturn(Optional.of(activeResident));
+        when(s3Service.uploadFile(any(), any()))
+                .thenReturn("https://test-bucket.s3.us-east-1.amazonaws.com/residents/new.jpg");
+        when(residentRepository.save(any())).thenReturn(activeResident);
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "new.jpg", "image/jpeg", new byte[100]);
+
+        residentService.uploadPhoto(residentId, file);
+
+        verify(s3Service).deleteFile("residents/old.jpg");
+    }
+
+    @Test
+    void uploadPhoto_throwsBusinessException_whenFileTooLarge() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "big.jpg", "image/jpeg", new byte[6 * 1024 * 1024]);
+
+        assertThrows(BusinessException.class,
+                () -> residentService.uploadPhoto(residentId, file));
+
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void uploadPhoto_throwsBusinessException_whenUnsupportedMimeType() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "doc.pdf", "application/pdf", new byte[100]);
+
+        assertThrows(BusinessException.class,
+                () -> residentService.uploadPhoto(residentId, file));
+
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void uploadPhoto_throwsResourceNotFoundException_whenResidentNotFound() {
+        when(residentRepository.findById(residentId)).thenReturn(Optional.empty());
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "photo.jpg", "image/jpeg", new byte[100]);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> residentService.uploadPhoto(residentId, file));
     }
 }
