@@ -74,6 +74,16 @@ public class Activity {
 
     /**
      * Activity categories used for filtering and reporting.
+     *
+     * <ul>
+     *   <li>{@code FITNESS} — physical exercise and movement</li>
+     *   <li>{@code ARTS} — creative arts and crafts</li>
+     *   <li>{@code SOCIAL} — group socialising and games</li>
+     *   <li>{@code COGNITIVE} — brain-training and educational activities</li>
+     *   <li>{@code MUSIC} — music, singing, and listening sessions</li>
+     *   <li>{@code OUTDOOR} — garden and outdoor activities</li>
+     *   <li>{@code OTHER} — any activity not covered by the above</li>
+     * </ul>
      */
     public enum Category {
         FITNESS, ARTS, SOCIAL, COGNITIVE, MUSIC, OUTDOOR, OTHER
@@ -81,6 +91,12 @@ public class Activity {
 
     /**
      * Lifecycle status of an activity.
+     *
+     * <ul>
+     *   <li>{@code SCHEDULED} — future activity visible on the calendar</li>
+     *   <li>{@code CANCELLED} — director has cancelled; remains visible but marked</li>
+     *   <li>{@code COMPLETED} — activity has taken place</li>
+     * </ul>
      */
     public enum Status {
         SCHEDULED, CANCELLED, COMPLETED
