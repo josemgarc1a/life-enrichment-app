@@ -11,8 +11,7 @@ import java.util.UUID;
  * Join entity recording a resident's enrollment in a scheduled activity.
  *
  * <p>The unique constraint on {@code (activity_id, resident_id)} prevents a resident
- * from being enrolled in the same activity more than once. Capacity enforcement is done
- * in the service layer by counting active enrollments before adding a new one.
+ * from being enrolled in the same activity more than once.
  */
 @Entity
 @Table(
@@ -34,7 +33,6 @@ public class ActivityEnrollment {
     @JoinColumn(name = "resident_id", nullable = false)
     private Resident resident;
 
-    /** The staff member or director who enrolled the resident. May be null for self-enrollment. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "enrolled_by")
     private User enrolledBy;
