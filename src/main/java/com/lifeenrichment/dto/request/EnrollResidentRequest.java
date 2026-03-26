@@ -1,8 +1,10 @@
 package com.lifeenrichment.dto.request;
 
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.UUID;
@@ -10,7 +12,7 @@ import java.util.UUID;
 /**
  * Request body for {@code POST /api/v1/activities/{id}/enrollments}.
  */
-@Getter @Setter @Builder
+@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class EnrollResidentRequest {
 
     @NotNull
