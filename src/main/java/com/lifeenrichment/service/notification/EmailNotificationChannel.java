@@ -29,6 +29,15 @@ public class EmailNotificationChannel implements NotificationChannel {
     @Value("${spring.mail.username:noreply@lifeenrichment.app}")
     private String fromAddress;
 
+    /**
+     * Returns {@code true} only when the requested channel is {@link NotificationLog.Channel#EMAIL}.
+     *
+     * <p>This adapter exclusively handles email delivery; all other channel types are
+     * delegated to their respective adapters by the notification service.
+     *
+     * @param channel the delivery channel to evaluate; never {@code null}
+     * @return {@code true} if {@code channel} is {@code EMAIL}, {@code false} otherwise
+     */
     @Override
     public boolean supports(NotificationLog.Channel channel) {
         return NotificationLog.Channel.EMAIL == channel;
