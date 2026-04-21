@@ -29,6 +29,18 @@ public class ActivityResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /**
+     * Series template ID. Non-null only on generated occurrence rows.
+     * Null on one-off activities and on the template row itself.
+     */
+    private UUID seriesId;
+
+    /**
+     * Number of occurrence rows generated when creating a recurring activity.
+     * Only populated on the response to a recurring {@code createActivity} call; null otherwise.
+     */
+    private Integer occurrenceCount;
+
     /** Current number of residents enrolled in this activity. */
     private long enrollmentCount;
 
