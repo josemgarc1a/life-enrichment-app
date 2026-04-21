@@ -9,6 +9,10 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "attendance_logs",
+       uniqueConstraints = @UniqueConstraint(
+               name = "uq_attendance_activity_resident",
+               columnNames = {"activity_id", "resident_id"}
+       ),
        indexes = {
            @Index(name = "idx_attendance_resident", columnList = "resident_id"),
            @Index(name = "idx_attendance_activity", columnList = "activity_id"),
