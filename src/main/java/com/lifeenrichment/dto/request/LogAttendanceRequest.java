@@ -32,4 +32,14 @@ public class LogAttendanceRequest {
     private AssistanceLevel assistanceLevel = AssistanceLevel.NONE;
 
     private String assistanceNotes;
+
+    /**
+     * Set to {@code true} when a resident attends without being pre-enrolled
+     * (e.g. wandered in, or matched via AI photo recognition).
+     * When true, the service skips the enrollment check and automatically
+     * creates an {@code ActivityEnrollment} record before logging attendance.
+     * Defaults to {@code false}.
+     */
+    @Builder.Default
+    private boolean walkOn = false;
 }

@@ -5,6 +5,7 @@ import com.lifeenrichment.dto.response.ActivityAttendanceSummaryResponse;
 import com.lifeenrichment.dto.response.AttendanceLogResponse;
 import com.lifeenrichment.dto.response.ResidentParticipationResponse;
 import com.lifeenrichment.entity.Activity;
+import com.lifeenrichment.entity.ActivityEnrollment;
 import com.lifeenrichment.entity.AttendanceLog;
 import com.lifeenrichment.entity.AttendanceLog.AttendanceStatus;
 import com.lifeenrichment.entity.Resident;
@@ -64,7 +65,7 @@ public class AttendanceService {
      * @param loggedByUserId ID of the authenticated staff member
      * @return the created or updated log
      * @throws ResourceNotFoundException if the activity, resident, or user does not exist
-     * @throws BusinessException         if the resident is not enrolled in the activity
+     * @throws BusinessException         if the resident is not enrolled and {@code walkOn} is false
      */
     @Transactional
     public AttendanceLogResponse logAttendance(LogAttendanceRequest request, UUID loggedByUserId) {
@@ -77,10 +78,23 @@ public class AttendanceService {
         User loggedBy = userRepository.findById(loggedByUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", loggedByUserId));
 
-        if (!enrollmentRepository.existsByActivityIdAndResidentId(
-                request.getActivityId(), request.getResidentId())) {
+        boolean enrolled = enrollmentRepository.existsByActivityIdAndResidentId(
+                request.getActivityId(), request.getResidentId());
+
+        if (!enrolled && !request.isWalkOn()) {
             throw new BusinessException("Resident " + request.getResidentId()
-                    + " is not enrolled in activity " + request.getActivityId());
+                    + " is not enrolled in activity " + request.getActivityId()
+                    + ". Set walkOn=true to log attendance for an unenrolled resident.");
+        }
+
+        if (!enrolled && request.isWalkOn()) {
+            enrollmentRepository.save(ActivityEnrollment.builder()
+                    .activity(activity)
+                    .resident(resident)
+                    .enrolledBy(loggedBy)
+                    .build());
+            log.info("Walk-on enrollment created: activity={} resident={} by={}",
+                    request.getActivityId(), request.getResidentId(), loggedByUserId);
         }
 
         AttendanceLog entry = attendanceLogRepository

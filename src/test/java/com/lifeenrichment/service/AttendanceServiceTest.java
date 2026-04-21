@@ -155,6 +155,55 @@ class AttendanceServiceTest {
         verify(attendanceLogRepository, times(1)).save(aliceLog);
     }
 
+    // ── logAttendance — walk-on ───────────────────────────────────────────────
+
+    @Test
+    void logAttendance_walkOn_autoEnrollsAndLogsAttendance() {
+        LogAttendanceRequest request = LogAttendanceRequest.builder()
+                .activityId(activityId)
+                .residentId(residentId)
+                .status(AttendanceStatus.ATTENDED)
+                .assistanceLevel(AssistanceLevel.NONE)
+                .walkOn(true)
+                .build();
+
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId)).thenReturn(Optional.of(activity));
+        when(residentRepository.findById(residentId)).thenReturn(Optional.of(alice));
+        when(userRepository.findById(staffId)).thenReturn(Optional.of(staff));
+        when(enrollmentRepository.existsByActivityIdAndResidentId(activityId, residentId)).thenReturn(false);
+        when(enrollmentRepository.save(any())).thenReturn(null);
+        when(attendanceLogRepository.findByActivityIdAndResidentId(activityId, residentId)).thenReturn(Optional.empty());
+        when(attendanceLogRepository.save(any())).thenReturn(aliceLog);
+
+        AttendanceLogResponse response = attendanceService.logAttendance(request, staffId);
+
+        assertThat(response.getStatus()).isEqualTo(AttendanceStatus.ATTENDED);
+        verify(enrollmentRepository).save(any()); // auto-enrollment created
+        verify(attendanceLogRepository).save(any());
+    }
+
+    @Test
+    void logAttendance_walkOn_doesNotDuplicateEnrollment_whenAlreadyEnrolled() {
+        LogAttendanceRequest request = LogAttendanceRequest.builder()
+                .activityId(activityId)
+                .residentId(residentId)
+                .status(AttendanceStatus.ATTENDED)
+                .walkOn(true)
+                .build();
+
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId)).thenReturn(Optional.of(activity));
+        when(residentRepository.findById(residentId)).thenReturn(Optional.of(alice));
+        when(userRepository.findById(staffId)).thenReturn(Optional.of(staff));
+        // Already enrolled — walk-on flag should not re-enroll
+        when(enrollmentRepository.existsByActivityIdAndResidentId(activityId, residentId)).thenReturn(true);
+        when(attendanceLogRepository.findByActivityIdAndResidentId(activityId, residentId)).thenReturn(Optional.empty());
+        when(attendanceLogRepository.save(any())).thenReturn(aliceLog);
+
+        attendanceService.logAttendance(request, staffId);
+
+        verify(enrollmentRepository, never()).save(any()); // no duplicate enrollment
+    }
+
     // ── logAttendance — validation failures ───────────────────────────────────
 
     @Test
