@@ -40,6 +40,17 @@ public class CreateActivityRequest {
     @Min(1)
     private Integer capacity;
 
-    /** Optional iCal RRULE string for recurring activities, e.g. {@code FREQ=WEEKLY;BYDAY=MO}. */
-    private String recurrenceRule;
+    /**
+     * Set to {@code true} to create a recurring activity series.
+     * When true, {@code dayOfWeek} is required and the service will generate
+     * 8 weeks of occurrence rows automatically.
+     */
+    private boolean recurring;
+
+    /**
+     * Day of week for recurring activities, e.g. {@code "THURSDAY"}.
+     * Required when {@code recurring = true}; ignored otherwise.
+     * Accepted values: MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY.
+     */
+    private String dayOfWeek;
 }
