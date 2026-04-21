@@ -91,11 +91,10 @@ public class NotificationService {
         List<ActivityEnrollment> enrollments = activityEnrollmentRepository.findByActivityId(activityId);
         for (ActivityEnrollment enrollment : enrollments) {
             Resident resident = enrollment.getResident();
-            String name = resident.getFirstName();
             String activityTitle = enrollment.getActivity().getTitle();
             String subject = activityTitle + " has been cancelled";
-            String body = "We're sorry, " + activityTitle
-                    + " has been cancelled. Please check with staff for details.";
+            String body = "We're sorry, " + resident.getFirstName() + ", "
+                    + activityTitle + " has been cancelled. Please check with staff for details.";
 
             String toAddress = resolveToAddress(resident, Channel.EMAIL);
             dispatchToUser(getUserIdForResident(resident), toAddress,
