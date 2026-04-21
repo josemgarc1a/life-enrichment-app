@@ -53,4 +53,13 @@ public interface NotificationLogRepository extends JpaRepository<NotificationLog
      * @return list of logs for that reference; empty if none have been sent for it
      */
     List<NotificationLog> findByReferenceId(UUID referenceId);
+
+    /**
+     * Returns all logs with the given delivery status, ordered by most-recent-first.
+     * Used by the Director logs endpoint when filtering by status without a specific user.
+     *
+     * @param status the delivery status to filter on (e.g. {@code SENT}, {@code FAILED}, {@code RETRYING})
+     * @return list of matching logs; empty if none exist for the given status
+     */
+    List<NotificationLog> findByStatus(DeliveryStatus status);
 }
