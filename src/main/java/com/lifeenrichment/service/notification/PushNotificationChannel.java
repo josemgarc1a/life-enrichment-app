@@ -21,6 +21,15 @@ public class PushNotificationChannel implements NotificationChannel {
 
     private final FirebaseMessaging firebaseMessaging;
 
+    /**
+     * Returns {@code true} only when the requested channel is {@link NotificationLog.Channel#PUSH}.
+     *
+     * <p>This adapter exclusively handles push notification delivery via FCM; all other channel
+     * types are delegated to their respective adapters by the notification service.
+     *
+     * @param channel the delivery channel to evaluate; never {@code null}
+     * @return {@code true} if {@code channel} is {@code PUSH}, {@code false} otherwise
+     */
     @Override
     public boolean supports(NotificationLog.Channel channel) {
         return NotificationLog.Channel.PUSH == channel;

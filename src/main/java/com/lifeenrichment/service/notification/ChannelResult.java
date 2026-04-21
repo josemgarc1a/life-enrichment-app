@@ -6,10 +6,24 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * Value object representing the outcome of a single channel delivery attempt.
+ * Immutable value object representing the outcome of a single delivery attempt by a
+ * {@link NotificationChannel} adapter.
  *
- * <p>Use the static factory methods {@link #success()} and {@link #failure(String)} rather
- * than the builder directly.
+ * <p>Rather than throwing exceptions, every adapter wraps its result (success or failure) in a
+ * {@code ChannelResult} and returns it to the notification service. The service can then
+ * persist the outcome to {@code NotificationLog} without needing to handle exceptions from
+ * individual channel adapters.
+ *
+ * <p>Prefer the static factory methods over the Lombok builder:
+ * <pre>{@code
+ *   // success
+ *   return ChannelResult.success();
+ *
+ *   // failure
+ *   return ChannelResult.failure(e.getMessage());
+ * }</pre>
+ *
+ * @see NotificationChannel#send(NotificationMessage)
  */
 @Getter
 @Builder
@@ -17,16 +31,29 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ChannelResult {
 
-    /** {@code true} if the message was accepted by the downstream provider. */
+    /**
+     * {@code true} if the downstream provider accepted the message for delivery.
+     *
+     * <p>Acceptance by the provider does not guarantee end-device delivery; it merely means
+     * the provider received the request without returning an error.
+     */
     private boolean success;
 
-    /** Human-readable error description; {@code null} when {@link #success} is {@code true}. */
+    /**
+     * Human-readable description of the failure reason.
+     *
+     * <p>This field is {@code null} when {@link #success} is {@code true}. When present, the
+     * value is typically the exception message from the downstream SDK (Twilio, FCM, JavaMail)
+     * and is persisted to the {@code NotificationLog} for operator visibility.
+     */
     private String errorMessage;
 
     /**
-     * Returns a successful result with no error message.
+     * Creates a {@code ChannelResult} indicating that the downstream provider accepted the message.
      *
-     * @return a {@link ChannelResult} indicating delivery success
+     * <p>The returned instance has {@code success == true} and {@code errorMessage == null}.
+     *
+     * @return a new successful {@link ChannelResult}
      */
     public static ChannelResult success() {
         return ChannelResult.builder()
@@ -35,10 +62,14 @@ public class ChannelResult {
     }
 
     /**
-     * Returns a failed result with the supplied error message.
+     * Creates a {@code ChannelResult} indicating that delivery failed.
      *
-     * @param errorMessage description of the failure; should not be {@code null}
-     * @return a {@link ChannelResult} indicating delivery failure
+     * <p>The returned instance has {@code success == false} and carries the provided
+     * {@code errorMessage} for logging and persistence. Callers should pass a non-null,
+     * human-readable string (typically {@code exception.getMessage()}).
+     *
+     * @param errorMessage concise description of why delivery failed; should not be {@code null}
+     * @return a new failed {@link ChannelResult} carrying the error description
      */
     public static ChannelResult failure(String errorMessage) {
         return ChannelResult.builder()
