@@ -60,9 +60,35 @@ public class NotificationPreference {
 
     /** Notification event types shared across preferences and logs. */
     public enum NotificationType {
+        /** Activity is about to start — sent to enrolled residents and staff. */
         ACTIVITY_REMINDER,
+
+        /** Activity was cancelled or rescheduled — sent to enrolled residents, staff, and family. */
         ACTIVITY_CANCELLED,
+
+        /** Resident was enrolled in an activity — sent to the resident and family members. */
         ENROLLMENT_CONFIRMED,
+
+        /**
+         * Resident actually attended an activity (attendance logged as ATTENDED).
+         * Primarily family-facing: lets relatives know their loved one participated.
+         */
+        ATTENDANCE_LOGGED,
+
+        /**
+         * A new photo from an activity the resident attended has been posted.
+         * Family-facing hook for Epic 6 (Photo Sharing) — infrastructure ready now,
+         * trigger wired when photo upload is implemented.
+         */
+        PHOTO_AVAILABLE,
+
+        /**
+         * Resident's participation rate has dropped below the configured threshold.
+         * Sent to family members and directors to prompt follow-up.
+         */
+        LOW_PARTICIPATION_ALERT,
+
+        /** Manual broadcast from a Director to all residents or a targeted group. */
         BROADCAST
     }
 }
