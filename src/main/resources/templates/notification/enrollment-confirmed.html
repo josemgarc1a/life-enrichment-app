@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Enrollment Confirmed</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background-color: #1976D2; padding: 24px 32px; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 22px; }
+        .body { padding: 32px; color: #333333; line-height: 1.6; }
+        .body p { margin: 0 0 16px; }
+        .activity-title { font-size: 20px; font-weight: bold; color: #1976D2; margin: 16px 0; }
+        .footer { padding: 20px 32px; background-color: #f4f4f4; font-size: 12px; color: #aaaaaa; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Life Enrichment App</h1>
+    </div>
+    <div class="body">
+        <p>Hi <span th:text="${recipientName}">Resident</span>,</p>
+        <p>Great news! Your enrollment in the following activity has been confirmed:</p>
+        <p class="activity-title" th:text="${activityTitle}">Activity Title</p>
+        <p th:text="${message}">Enrollment details will appear here.</p>
+        <p>We look forward to your participation!</p>
+        <p>Warm regards,<br/><strong th:text="${facilityName}">Life Enrichment Facility</strong></p>
+    </div>
+    <div class="footer">
+        &copy; <span th:text="${facilityName}">Life Enrichment App</span>. This is an automated message, please do not reply.
+    </div>
+</div>
+</body>
+</html>

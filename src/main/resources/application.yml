@@ -73,6 +73,8 @@ twilio:
 # ===== FIREBASE (Push) =====
 firebase:
   credentials-file: ${FIREBASE_CREDENTIALS_FILE:classpath:firebase-service-account.json}
+  # Path to the Firebase service-account JSON file used by the push adapter
+  credentials-path: ${FIREBASE_CREDENTIALS_PATH:firebase-service-account.json}
 
 # ===== NOTIFICATIONS =====
 notifications:
