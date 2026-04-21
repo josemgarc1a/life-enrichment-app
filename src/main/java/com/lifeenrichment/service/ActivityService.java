@@ -22,8 +22,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -64,6 +70,10 @@ public class ActivityService {
         User creator = userRepository.findById(creatorId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", creatorId));
 
+        String rrule = request.isRecurring()
+                ? buildRrule(request.getDayOfWeek())
+                : null;
+
         Activity activity = Activity.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
@@ -72,12 +82,19 @@ public class ActivityService {
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
                 .capacity(request.getCapacity())
-                .recurrenceRule(request.getRecurrenceRule())
+                .recurrenceRule(rrule)
                 .createdBy(creator)
                 .build();
 
         Activity saved = activityRepository.save(activity);
         log.info("Activity created with id: {}", saved.getId());
+
+        if (request.isRecurring()) {
+            List<Activity> occurrences = expandSeries(saved, RECURRENCE_WINDOW_WEEKS);
+            log.info("Generated {} occurrences for recurring activity {}", occurrences.size(), saved.getId());
+            return toResponseWithOccurrenceCount(saved, occurrences.size());
+        }
+
         return toResponse(saved);
     }
 
@@ -197,6 +214,78 @@ public class ActivityService {
         log.info("Activity soft-deleted: {}", id);
     }
 
+    // ── Series management ─────────────────────────────────────────────────────
+
+    /**
+     * Cancels an entire recurring series: soft-deletes all future occurrences and
+     * marks the template row as {@code CANCELLED}.
+     *
+     * @throws ResourceNotFoundException if no active template exists with that ID
+     * @throws BusinessException         if the activity is not a recurring series template
+     */
+    @Transactional
+    public ActivityResponse cancelSeries(UUID templateId) {
+        log.info("Cancelling series for template activity {}", templateId);
+
+        Activity template = requireActive(templateId);
+        if (template.getRecurrenceRule() == null) {
+            throw new BusinessException("Activity " + templateId + " is not a recurring series template");
+        }
+
+        List<Activity> futureOccurrences = activityRepository
+                .findBySeriesIdAndStartTimeAfterAndDeletedAtIsNull(templateId, LocalDateTime.now());
+
+        futureOccurrences.forEach(o -> o.setDeletedAt(LocalDateTime.now()));
+        activityRepository.saveAll(futureOccurrences);
+
+        template.setStatus(Activity.Status.CANCELLED);
+        Activity saved = activityRepository.save(template);
+
+        log.info("Cancelled series {}: soft-deleted {} future occurrences", templateId, futureOccurrences.size());
+        return toResponse(saved);
+    }
+
+    /**
+     * Applies title, location, and/or capacity changes to all future occurrences of a series.
+     * Does not alter occurrence start/end times.
+     *
+     * @throws ResourceNotFoundException if no active template exists with that ID
+     * @throws BusinessException         if the activity is not a recurring series template
+     */
+    @Transactional
+    public ActivityResponse updateSeries(UUID templateId, UpdateActivityRequest request) {
+        log.info("Updating series for template activity {}", templateId);
+
+        Activity template = requireActive(templateId);
+        if (template.getRecurrenceRule() == null) {
+            throw new BusinessException("Activity " + templateId + " is not a recurring series template");
+        }
+
+        // Update the template itself
+        if (request.getTitle() != null)       template.setTitle(request.getTitle());
+        if (request.getDescription() != null) template.setDescription(request.getDescription());
+        if (request.getCategory() != null)    template.setCategory(request.getCategory());
+        if (request.getLocation() != null)    template.setLocation(request.getLocation());
+        if (request.getCapacity() != null)    template.setCapacity(request.getCapacity());
+        activityRepository.save(template);
+
+        // Propagate to all future occurrences (title, description, location, category, capacity only)
+        List<Activity> futureOccurrences = activityRepository
+                .findBySeriesIdAndStartTimeAfterAndDeletedAtIsNull(templateId, LocalDateTime.now());
+
+        futureOccurrences.forEach(o -> {
+            if (request.getTitle() != null)       o.setTitle(request.getTitle());
+            if (request.getDescription() != null) o.setDescription(request.getDescription());
+            if (request.getCategory() != null)    o.setCategory(request.getCategory());
+            if (request.getLocation() != null)    o.setLocation(request.getLocation());
+            if (request.getCapacity() != null)    o.setCapacity(request.getCapacity());
+        });
+        activityRepository.saveAll(futureOccurrences);
+
+        log.info("Updated series {}: propagated changes to {} future occurrences", templateId, futureOccurrences.size());
+        return toResponse(activityRepository.findById(templateId).orElseThrow());
+    }
+
     // ── Enrollment ────────────────────────────────────────────────────────────
 
     /**
@@ -260,6 +349,100 @@ public class ActivityService {
         return toResponse(activityRepository.findById(activityId).orElseThrow());
     }
 
+    // ── Recurrence helpers ────────────────────────────────────────────────────
+
+    public static final int RECURRENCE_WINDOW_WEEKS = 8;
+
+    private static final Map<String, DayOfWeek> BYDAY_MAP = Map.of(
+            "MO", DayOfWeek.MONDAY,
+            "TU", DayOfWeek.TUESDAY,
+            "WE", DayOfWeek.WEDNESDAY,
+            "TH", DayOfWeek.THURSDAY,
+            "FR", DayOfWeek.FRIDAY,
+            "SA", DayOfWeek.SATURDAY,
+            "SU", DayOfWeek.SUNDAY
+    );
+
+    private static final Map<String, String> DAY_TO_BYDAY = Map.of(
+            "MONDAY", "MO", "TUESDAY", "TU", "WEDNESDAY", "WE",
+            "THURSDAY", "TH", "FRIDAY", "FR", "SATURDAY", "SA", "SUNDAY", "SU"
+    );
+
+    /**
+     * Builds an iCal RRULE string from a plain day-of-week name.
+     *
+     * @param dayOfWeek e.g. {@code "THURSDAY"}
+     * @return e.g. {@code "FREQ=WEEKLY;BYDAY=TH"}
+     * @throws BusinessException if the day name is not recognised
+     */
+    String buildRrule(String dayOfWeek) {
+        String byday = Optional.ofNullable(DAY_TO_BYDAY.get(dayOfWeek.toUpperCase()))
+                .orElseThrow(() -> new BusinessException("Invalid dayOfWeek value: " + dayOfWeek
+                        + ". Expected one of: " + DAY_TO_BYDAY.keySet()));
+        return "FREQ=WEEKLY;BYDAY=" + byday;
+    }
+
+    /**
+     * Parses the {@code BYDAY} component of an RRULE string and returns the corresponding
+     * {@link DayOfWeek}.
+     *
+     * @param rrule e.g. {@code "FREQ=WEEKLY;BYDAY=TH"}
+     * @throws BusinessException if BYDAY is missing or unrecognised
+     */
+    DayOfWeek parseDayOfWeek(String rrule) {
+        String byday = java.util.Arrays.stream(rrule.split(";"))
+                .filter(p -> p.startsWith("BYDAY="))
+                .findFirst()
+                .map(p -> p.substring(6))
+                .orElseThrow(() -> new BusinessException("Invalid RRULE: missing BYDAY component — " + rrule));
+        return Optional.ofNullable(BYDAY_MAP.get(byday))
+                .orElseThrow(() -> new BusinessException("Unrecognised BYDAY value: " + byday));
+    }
+
+    /**
+     * Generates occurrence {@link Activity} rows for a series template, filling the
+     * rolling window up to {@code weeks} weeks from now. Idempotent — existing occurrences
+     * at any given start time are skipped.
+     *
+     * @param template the series template (must have {@code recurrenceRule} set)
+     * @param weeks    number of weeks ahead to fill
+     * @return the list of newly created occurrence rows (may be empty if all dates already exist)
+     */
+    public List<Activity> expandSeries(Activity template, int weeks) {
+        DayOfWeek targetDay = parseDayOfWeek(template.getRecurrenceRule());
+        Duration occurrenceDuration = Duration.between(template.getStartTime(), template.getEndTime());
+
+        LocalDateTime windowEnd = LocalDateTime.now().plusWeeks(weeks);
+
+        // Find the first occurrence of targetDay on or after today
+        LocalDate nextDate = LocalDate.now();
+        while (nextDate.getDayOfWeek() != targetDay) {
+            nextDate = nextDate.plusDays(1);
+        }
+
+        List<Activity> toSave = new ArrayList<>();
+        LocalDateTime occurrenceStart = LocalDateTime.of(nextDate, template.getStartTime().toLocalTime());
+
+        while (occurrenceStart.isBefore(windowEnd)) {
+            if (!activityRepository.existsBySeriesIdAndStartTime(template.getId(), occurrenceStart)) {
+                toSave.add(Activity.builder()
+                        .title(template.getTitle())
+                        .description(template.getDescription())
+                        .category(template.getCategory())
+                        .location(template.getLocation())
+                        .capacity(template.getCapacity())
+                        .startTime(occurrenceStart)
+                        .endTime(occurrenceStart.plus(occurrenceDuration))
+                        .seriesId(template.getId())
+                        .createdBy(template.getCreatedBy())
+                        .build());
+            }
+            occurrenceStart = occurrenceStart.plusWeeks(1);
+        }
+
+        return activityRepository.saveAll(toSave);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
@@ -271,6 +454,29 @@ public class ActivityService {
     }
 
     // ── Mappers ───────────────────────────────────────────────────────────────
+
+    private ActivityResponse toResponseWithOccurrenceCount(Activity activity, int occurrenceCount) {
+        ActivityResponse base = toResponse(activity);
+        return ActivityResponse.builder()
+                .id(base.getId())
+                .title(base.getTitle())
+                .description(base.getDescription())
+                .category(base.getCategory())
+                .location(base.getLocation())
+                .startTime(base.getStartTime())
+                .endTime(base.getEndTime())
+                .capacity(base.getCapacity())
+                .recurrenceRule(base.getRecurrenceRule())
+                .status(base.getStatus())
+                .seriesId(base.getSeriesId())
+                .createdById(base.getCreatedById())
+                .createdAt(base.getCreatedAt())
+                .updatedAt(base.getUpdatedAt())
+                .occurrenceCount(occurrenceCount)
+                .enrollmentCount(base.getEnrollmentCount())
+                .enrolledResidentIds(base.getEnrolledResidentIds())
+                .build();
+    }
 
     private ActivityResponse toResponse(Activity activity) {
         List<ActivityEnrollment> enrollments = enrollmentRepository.findByActivityId(activity.getId());
@@ -286,6 +492,7 @@ public class ActivityService {
                 .capacity(activity.getCapacity())
                 .recurrenceRule(activity.getRecurrenceRule())
                 .status(activity.getStatus())
+                .seriesId(activity.getSeriesId())
                 .createdById(activity.getCreatedBy() != null ? activity.getCreatedBy().getId() : null)
                 .createdAt(activity.getCreatedAt())
                 .updatedAt(activity.getUpdatedAt())

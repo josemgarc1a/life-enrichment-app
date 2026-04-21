@@ -36,4 +36,16 @@ public interface ActivityRepository extends JpaRepository<Activity, UUID> {
     Page<Activity> findByDeletedAtIsNullAndStatus(Activity.Status status, Pageable pageable);
 
     Page<Activity> findByDeletedAtIsNull(Pageable pageable);
+
+    /** All active template activities (have a recurrence rule, not deleted, not cancelled). */
+    List<Activity> findByRecurrenceRuleIsNotNullAndDeletedAtIsNullAndStatus(Activity.Status status);
+
+    /** All non-deleted occurrences that belong to a series. */
+    List<Activity> findBySeriesIdAndDeletedAtIsNull(UUID seriesId);
+
+    /** Future non-deleted occurrences belonging to a series — used for cancel/update series. */
+    List<Activity> findBySeriesIdAndStartTimeAfterAndDeletedAtIsNull(UUID seriesId, LocalDateTime after);
+
+    /** Idempotency check — true if an occurrence for this series already exists at this exact start time. */
+    boolean existsBySeriesIdAndStartTime(UUID seriesId, LocalDateTime startTime);
 }

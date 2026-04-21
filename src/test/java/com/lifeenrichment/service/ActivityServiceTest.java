@@ -348,4 +348,291 @@ class ActivityServiceTest {
         verify(activityRepository).findByDeletedAtIsNullAndCategoryAndStatus(
                 Activity.Category.FITNESS, Activity.Status.SCHEDULED, PageRequest.of(0, 10));
     }
+
+    // ── buildRrule ────────────────────────────────────────────────────────────
+
+    @Test
+    void buildRrule_returnsCorrectRrule_forThursday() {
+        assertThat(activityService.buildRrule("THURSDAY")).isEqualTo("FREQ=WEEKLY;BYDAY=TH");
+    }
+
+    @Test
+    void buildRrule_isCaseInsensitive() {
+        assertThat(activityService.buildRrule("thursday")).isEqualTo("FREQ=WEEKLY;BYDAY=TH");
+        assertThat(activityService.buildRrule("Monday")).isEqualTo("FREQ=WEEKLY;BYDAY=MO");
+    }
+
+    @Test
+    void buildRrule_throwsBusinessException_forInvalidDay() {
+        assertThrows(com.lifeenrichment.exception.BusinessException.class,
+                () -> activityService.buildRrule("FUNDAY"));
+    }
+
+    // ── parseDayOfWeek ────────────────────────────────────────────────────────
+
+    @Test
+    void parseDayOfWeek_returnsCorrectDay_forValidRrule() {
+        assertThat(activityService.parseDayOfWeek("FREQ=WEEKLY;BYDAY=TH"))
+                .isEqualTo(java.time.DayOfWeek.THURSDAY);
+        assertThat(activityService.parseDayOfWeek("FREQ=WEEKLY;BYDAY=MO"))
+                .isEqualTo(java.time.DayOfWeek.MONDAY);
+    }
+
+    @Test
+    void parseDayOfWeek_throwsBusinessException_whenBydayMissing() {
+        assertThrows(com.lifeenrichment.exception.BusinessException.class,
+                () -> activityService.parseDayOfWeek("FREQ=WEEKLY"));
+    }
+
+    @Test
+    void parseDayOfWeek_throwsBusinessException_forUnknownByday() {
+        assertThrows(com.lifeenrichment.exception.BusinessException.class,
+                () -> activityService.parseDayOfWeek("FREQ=WEEKLY;BYDAY=XX"));
+    }
+
+    // ── expandSeries ─────────────────────────────────────────────────────────
+
+    @Test
+    void expandSeries_generates8Occurrences_forWeeklyRecurrence() {
+        Activity template = Activity.builder()
+                .id(UUID.randomUUID())
+                .title("Thursday Night Bingo")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .startTime(LocalDateTime.now().plusDays(1).withHour(18).withMinute(0))
+                .endTime(LocalDateTime.now().plusDays(1).withHour(19).withMinute(0))
+                .capacity(20)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TH")
+                .createdBy(director)
+                .build();
+
+        when(activityRepository.existsBySeriesIdAndStartTime(eq(template.getId()), any()))
+                .thenReturn(false);
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Activity> occurrences = activityService.expandSeries(template, 8);
+
+        assertThat(occurrences).hasSize(8);
+        occurrences.forEach(o -> {
+            assertThat(o.getSeriesId()).isEqualTo(template.getId());
+            assertThat(o.getRecurrenceRule()).isNull();
+            assertThat(o.getTitle()).isEqualTo(template.getTitle());
+            assertThat(o.getStartTime().getDayOfWeek()).isEqualTo(java.time.DayOfWeek.THURSDAY);
+        });
+    }
+
+    @Test
+    void expandSeries_skipsExistingOccurrences_isIdempotent() {
+        Activity template = Activity.builder()
+                .id(UUID.randomUUID())
+                .title("Monday Yoga")
+                .category(Activity.Category.FITNESS)
+                .location("Garden")
+                .startTime(LocalDateTime.now().plusDays(1).withHour(9).withMinute(0))
+                .endTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0))
+                .capacity(10)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=MO")
+                .createdBy(director)
+                .build();
+
+        // All dates already exist
+        when(activityRepository.existsBySeriesIdAndStartTime(eq(template.getId()), any()))
+                .thenReturn(true);
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Activity> occurrences = activityService.expandSeries(template, 8);
+
+        assertThat(occurrences).isEmpty();
+    }
+
+    @Test
+    void expandSeries_occurrencesHaveCorrectDuration() {
+        Activity template = Activity.builder()
+                .id(UUID.randomUUID())
+                .title("Friday Arts")
+                .category(Activity.Category.ARTS)
+                .location("Arts Room")
+                .startTime(LocalDateTime.now().plusDays(1).withHour(14).withMinute(0))
+                .endTime(LocalDateTime.now().plusDays(1).withHour(16).withMinute(0)) // 2-hour session
+                .capacity(8)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=FR")
+                .createdBy(director)
+                .build();
+
+        when(activityRepository.existsBySeriesIdAndStartTime(any(), any())).thenReturn(false);
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Activity> occurrences = activityService.expandSeries(template, 8);
+
+        occurrences.forEach(o -> {
+            long durationHours = java.time.Duration.between(o.getStartTime(), o.getEndTime()).toHours();
+            assertThat(durationHours).isEqualTo(2);
+            assertThat(o.getStartTime().getDayOfWeek()).isEqualTo(java.time.DayOfWeek.FRIDAY);
+        });
+    }
+
+    // ── createActivity (recurring) ────────────────────────────────────────────
+
+    @Test
+    void createActivity_recurring_generatesOccurrencesAndReturnsCount() {
+        CreateActivityRequest request = CreateActivityRequest.builder()
+                .title("Thursday Night Bingo")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .startTime(NOW.plusDays(3))
+                .endTime(NOW.plusDays(3).plusHours(1))
+                .capacity(20)
+                .recurring(true)
+                .dayOfWeek("THURSDAY")
+                .build();
+
+        Activity savedTemplate = Activity.builder()
+                .id(activityId)
+                .title("Thursday Night Bingo")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .startTime(NOW.plusDays(3))
+                .endTime(NOW.plusDays(3).plusHours(1))
+                .capacity(20)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TH")
+                .status(Activity.Status.SCHEDULED)
+                .createdBy(director)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(director));
+        when(activityRepository.save(any())).thenReturn(savedTemplate);
+        when(activityRepository.existsBySeriesIdAndStartTime(any(), any())).thenReturn(false);
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(enrollmentRepository.findByActivityId(activityId)).thenReturn(List.of());
+
+        ActivityResponse response = activityService.createActivity(request, userId);
+
+        assertThat(response.getRecurrenceRule()).isEqualTo("FREQ=WEEKLY;BYDAY=TH");
+        assertThat(response.getOccurrenceCount()).isEqualTo(8);
+    }
+
+    @Test
+    void createActivity_nonRecurring_doesNotCallExpandSeries() {
+        CreateActivityRequest request = CreateActivityRequest.builder()
+                .title("One-off Event")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .startTime(NOW.plusDays(1))
+                .endTime(NOW.plusDays(1).plusHours(1))
+                .capacity(10)
+                .recurring(false)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(director));
+        when(activityRepository.save(any())).thenReturn(scheduledActivity);
+        when(enrollmentRepository.findByActivityId(activityId)).thenReturn(List.of());
+
+        ActivityResponse response = activityService.createActivity(request, userId);
+
+        assertThat(response.getOccurrenceCount()).isNull();
+        verify(activityRepository, never()).existsBySeriesIdAndStartTime(any(), any());
+    }
+
+    // ── cancelSeries ─────────────────────────────────────────────────────────
+
+    @Test
+    void cancelSeries_softDeletesFutureOccurrencesAndCancelsTemplate() {
+        Activity template = Activity.builder()
+                .id(activityId)
+                .title("Thursday Night Bingo")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .startTime(NOW.plusDays(1))
+                .endTime(NOW.plusDays(1).plusHours(1))
+                .capacity(20)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TH")
+                .status(Activity.Status.SCHEDULED)
+                .createdBy(director)
+                .build();
+
+        Activity futureOccurrence = Activity.builder()
+                .id(UUID.randomUUID())
+                .title("Thursday Night Bingo")
+                .seriesId(activityId)
+                .startTime(LocalDateTime.now().plusDays(7))
+                .endTime(LocalDateTime.now().plusDays(7).plusHours(1))
+                .capacity(20)
+                .build();
+
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId)).thenReturn(Optional.of(template));
+        when(activityRepository.findBySeriesIdAndStartTimeAfterAndDeletedAtIsNull(eq(activityId), any()))
+                .thenReturn(List.of(futureOccurrence));
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(activityRepository.save(any())).thenReturn(template);
+        when(enrollmentRepository.findByActivityId(activityId)).thenReturn(List.of());
+
+        activityService.cancelSeries(activityId);
+
+        assertThat(futureOccurrence.getDeletedAt()).isNotNull();
+        assertThat(template.getStatus()).isEqualTo(Activity.Status.CANCELLED);
+    }
+
+    @Test
+    void cancelSeries_throwsBusinessException_forNonRecurringActivity() {
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId))
+                .thenReturn(Optional.of(scheduledActivity)); // no recurrenceRule
+
+        assertThrows(com.lifeenrichment.exception.BusinessException.class,
+                () -> activityService.cancelSeries(activityId));
+    }
+
+    // ── updateSeries ─────────────────────────────────────────────────────────
+
+    @Test
+    void updateSeries_propagatesChangesToFutureOccurrences() {
+        Activity template = Activity.builder()
+                .id(activityId)
+                .title("Thursday Night Bingo")
+                .category(Activity.Category.SOCIAL)
+                .location("Main Hall")
+                .capacity(20)
+                .recurrenceRule("FREQ=WEEKLY;BYDAY=TH")
+                .status(Activity.Status.SCHEDULED)
+                .startTime(NOW.plusDays(1))
+                .endTime(NOW.plusDays(1).plusHours(1))
+                .createdBy(director)
+                .build();
+
+        Activity occurrence = Activity.builder()
+                .id(UUID.randomUUID())
+                .title("Thursday Night Bingo")
+                .location("Main Hall")
+                .capacity(20)
+                .seriesId(activityId)
+                .startTime(LocalDateTime.now().plusDays(7))
+                .endTime(LocalDateTime.now().plusDays(7).plusHours(1))
+                .build();
+
+        UpdateActivityRequest request = UpdateActivityRequest.builder()
+                .location("Community Room")
+                .capacity(25)
+                .build();
+
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId)).thenReturn(Optional.of(template));
+        when(activityRepository.findBySeriesIdAndStartTimeAfterAndDeletedAtIsNull(eq(activityId), any()))
+                .thenReturn(List.of(occurrence));
+        when(activityRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(activityRepository.save(any())).thenReturn(template);
+        when(activityRepository.findById(activityId)).thenReturn(Optional.of(template));
+        when(enrollmentRepository.findByActivityId(any())).thenReturn(List.of());
+
+        activityService.updateSeries(activityId, request);
+
+        assertThat(occurrence.getLocation()).isEqualTo("Community Room");
+        assertThat(occurrence.getCapacity()).isEqualTo(25);
+    }
+
+    @Test
+    void updateSeries_throwsBusinessException_forNonRecurringActivity() {
+        when(activityRepository.findByIdAndDeletedAtIsNull(activityId))
+                .thenReturn(Optional.of(scheduledActivity));
+
+        assertThrows(com.lifeenrichment.exception.BusinessException.class,
+                () -> activityService.updateSeries(activityId, UpdateActivityRequest.builder().build()));
+    }
 }
